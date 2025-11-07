@@ -21,7 +21,7 @@ Add this to your `Cargo.toml`:
 ```toml
 [dependencies]
 mlua = { version = "0.9", features = ["lua54", "macros"] }
-mlua_magic_macros = "0.1.0" # Or the version you are using
+mlua-magic-macros = "0.1.1" # Or the version you are using
 ```
 
 ## ✨ Quick Start Example
