@@ -1,6 +1,6 @@
 [package]
 name = "mlua-magic-macros"
-version = "0.1.01"
+version = "0.1.1"
 authors = ["Brendan Lucas <brendan@mail.renderlabs.cloud>"]
 description = "Simplify mlua type conversions like magic!"
 license = "MIT"
