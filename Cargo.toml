@@ -6,7 +6,7 @@ description = "Simplify mlua type conversions like magic!"
 repository = "https://github.com/Renderthegreat/mlua_magic"
 license = "MIT"
 edition = "2024"
-readme="README.md"
+readme = "README.md"
 
 [lib]
 proc-macro = true
@@ -19,7 +19,7 @@ darling = "0.21.3"
 
 [dev-dependencies]
 mlua = { version = "0.11.4", features = ["lua54", "serde", "macros"] }
-serde = { version = "1.0.228", features = [ "derive" ]}
+serde = { version = "1.0.228", features = ["derive"] }
 tracing = "0.1.41"
 tracing-subscriber = "0.3.20"
 

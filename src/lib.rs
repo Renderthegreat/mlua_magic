@@ -8,13 +8,9 @@ use ::proc_macro::TokenStream;
 use ::proc_macro2;
 use ::proc_macro2::Ident;
 
-use ::quote::{ quote, format_ident };
+use ::quote::{format_ident, quote};
 
-use ::syn::{
-	parse_macro_input,
-	Fields, Pat,
-	TypePath,
-};
+use ::syn::{Fields, Pat, TypePath, parse_macro_input};
 
 use crate::compile::parse_compile_args;
 
@@ -67,53 +63,52 @@ use crate::compile::parse_compile_args;
 /// ensuring a consistent interface between Rust types and Lua scripts.
 #[proc_macro_attribute]
 pub fn structure(_attr: TokenStream, item: TokenStream) -> TokenStream {
-	let ast: syn::ItemStruct = parse_macro_input!(item as syn::ItemStruct);
-	let name: &Ident = &ast.ident;
+    let ast: syn::ItemStruct = parse_macro_input!(item as syn::ItemStruct);
+    let name: &Ident = &ast.ident;
 
-	// TODO: Add type validation?
-	let mut user_data_fields: Vec<proc_macro2::TokenStream> = Vec::new();
+    // TODO: Add type validation?
+    let mut user_data_fields: Vec<proc_macro2::TokenStream> = Vec::new();
 
-	for field in &ast.fields {
-		let field_name: &Ident = field.ident.as_ref().expect("Field must have a name");
-		let field_name_str: String = field_name.to_string();
-		let field_ty: &syn::Type = &field.ty;
+    for field in &ast.fields {
+        let field_name: &Ident = field.ident.as_ref().expect("Field must have a name");
+        let field_name_str: String = field_name.to_string();
+        let field_ty: &syn::Type = &field.ty;
 
-		user_data_fields.push(quote! {
-			fields.add_field_method_get(#field_name_str, |_, this| {
-				return Ok(this.#field_name.clone());
-			});
-		});
+        user_data_fields.push(quote! {
+            fields.add_field_method_get(#field_name_str, |_, this| {
+                return Ok(this.#field_name.clone());
+            });
+        });
 
-		user_data_fields.push(quote! {
-			fields.add_field_method_set(#field_name_str, |_, this, val: #field_ty| {
-				this.#field_name = val;
-				return Ok(());
-			});
-		});
-	}
+        user_data_fields.push(quote! {
+            fields.add_field_method_set(#field_name_str, |_, this, val: #field_ty| {
+                this.#field_name = val;
+                return Ok(());
+            });
+        });
+    }
 
-	// Create the helper function `_to_mlua_fields`
-	let helper_fn: proc_macro2::TokenStream = quote! {
-		impl #name {
-			#[doc(hidden)]
-			pub fn _to_mlua_fields<F: mlua::UserDataFields<Self>>(fields: &mut F) -> () {
-				#(#user_data_fields)*
-			}
-		}
-	};
+    // Create the helper function `_to_mlua_fields`
+    let helper_fn: proc_macro2::TokenStream = quote! {
+        impl #name {
+            #[doc(hidden)]
+            pub fn _to_mlua_fields<F: mlua::UserDataFields<Self>>(fields: &mut F) -> () {
+                #(#user_data_fields)*
+            }
+        }
+    };
 
-	let original_tokens: proc_macro2::TokenStream = quote! {
-		#ast
-	};
-	let helper_tokens: proc_macro2::TokenStream = quote! {
-		#helper_fn
-	};
+    let original_tokens: proc_macro2::TokenStream = quote! {
+        #ast
+    };
+    let helper_tokens: proc_macro2::TokenStream = quote! {
+        #helper_fn
+    };
 
-	let mut output: proc_macro2::TokenStream = original_tokens;
-	output.extend(helper_tokens);
+    let mut output: proc_macro2::TokenStream = original_tokens;
+    output.extend(helper_tokens);
 
-
-	return output.into();
+    return output.into();
 }
 
 /// Implements a helper function `_to_mlua_variants` for a Rust `enum'.
@@ -135,90 +130,91 @@ pub fn structure(_attr: TokenStream, item: TokenStream) -> TokenStream {
 /// This is intended to be used with `impl mlua::UserData`.
 #[proc_macro_attribute]
 pub fn enumeration(__attr: TokenStream, item: TokenStream) -> TokenStream {
-	let ast: syn::ItemEnum = parse_macro_input!(item as syn::ItemEnum);
-	let name: &Ident = &ast.ident;
-	// let name_str: String = name.to_string();
+    let ast: syn::ItemEnum = parse_macro_input!(item as syn::ItemEnum);
+    let name: &Ident = &ast.ident;
+    // let name_str: String = name.to_string();
 
-	// Build registrations for unit variants (register as static constructors)
-	let mut variant_registrations: Vec<proc_macro2::TokenStream> = Vec::new();
-	for variant in &ast.variants {
-		match &variant.fields {
-			Fields::Unit => {
-				let variant_name: &Ident = &variant.ident;
-				let variant_name_str: String = variant_name.to_string();
+    // Build registrations for unit variants (register as static constructors)
+    let mut variant_registrations: Vec<proc_macro2::TokenStream> = Vec::new();
+    for variant in &ast.variants {
+        match &variant.fields {
+            Fields::Unit => {
+                let variant_name: &Ident = &variant.ident;
+                let variant_name_str: String = variant_name.to_string();
 
-				// use add_function to register an associated/static function that returns the enum
-				variant_registrations.push(quote! {
-					// e.g. methods.add_function("Idle", |_, (): ()| Ok(PlayerStatus::Idle));
-					methods.add_function(#variant_name_str, |_, (): ()| {
-						Ok(#name::#variant_name)
-					});
-				});
-			},
-			Fields::Unnamed(fields) => {
-				let variant_name = &variant.ident;
-				let variant_name_str = variant_name.to_string();
+                // use add_function to register an associated/static function that returns the enum
+                variant_registrations.push(quote! {
+                    // e.g. methods.add_function("Idle", |_, (): ()| Ok(PlayerStatus::Idle));
+                    methods.add_function(#variant_name_str, |_, (): ()| {
+                        Ok(#name::#variant_name)
+                    });
+                });
+            }
+            Fields::Unnamed(fields) => {
+                let variant_name = &variant.ident;
+                let variant_name_str = variant_name.to_string();
 
-				// Extract each field type T1, T2, …
-				let field_types: Vec<_> =
-					fields.unnamed.iter().map(|f| &f.ty).collect();
+                // Extract each field type T1, T2, …
+                let field_types: Vec<_> = fields.unnamed.iter().map(|f| &f.ty).collect();
 
-				let arg_idents: Vec<Ident> = (0..field_types.len())
-					.map(|i: usize| {
-						return format_ident!("arg{}", i);
-					})
-					.collect()
-				;
+                let arg_idents: Vec<Ident> = (0..field_types.len())
+                    .map(|i: usize| {
+                        return format_ident!("arg{}", i);
+                    })
+                    .collect();
 
-				variant_registrations.push(quote! {
+                variant_registrations.push(quote! {
 					methods.add_function(#variant_name_str, |_, (#(#arg_idents),*): (#(#field_types),*)| {
 						Ok(#name::#variant_name(#(#arg_idents),*))
 					});
 				});
-			},
-			Fields::Named(fields) => {
-				// Same pattern as unnamed, except wrap into a struct-like variant:
-				let variant_name = &variant.ident;
-				let variant_name_str = variant_name.to_string();
+            }
+            Fields::Named(fields) => {
+                // Same pattern as unnamed, except wrap into a struct-like variant:
+                let variant_name = &variant.ident;
+                let variant_name_str = variant_name.to_string();
 
-				let names: Vec<_> = fields.named.iter().map(|f| f.ident.as_ref().unwrap()).collect();
-				let types: Vec<_> = fields.named.iter().map(|f| &f.ty).collect();
+                let names: Vec<_> = fields
+                    .named
+                    .iter()
+                    .map(|f| f.ident.as_ref().unwrap())
+                    .collect();
+                let types: Vec<_> = fields.named.iter().map(|f| &f.ty).collect();
 
-				variant_registrations.push(quote! {
-					methods.add_function(#variant_name_str, |_, tbl: mlua::Table| {
-						Ok(#name::#variant_name {
-							#(#names: tbl.get::<_, #types>(stringify!(#names))?),*
-						})
-					});
-				});
-			}
-		};
-	}
+                variant_registrations.push(quote! {
+                    methods.add_function(#variant_name_str, |_, tbl: mlua::Table| {
+                        Ok(#name::#variant_name {
+                            #(#names: tbl.get::<_, #types>(stringify!(#names))?),*
+                        })
+                    });
+                });
+            }
+        };
+    }
 
-	// Create helper fn _to_mlua_variants, plus FromLua and IntoLua impls for lossless userdata round-trip.
-	// FromLua requires Clone so we can return owned values from borrowed userdata.
-	let helper_fn: proc_macro2::TokenStream = quote! {
-		impl #name {
-			#[doc(hidden)]
-			pub fn _to_mlua_variants<M: mlua::UserDataMethods<Self>>(methods: &mut M) -> () {
-				#(#variant_registrations)*;
-			}
-		}
-	};
+    // Create helper fn _to_mlua_variants, plus FromLua and IntoLua impls for lossless userdata round-trip.
+    // FromLua requires Clone so we can return owned values from borrowed userdata.
+    let helper_fn: proc_macro2::TokenStream = quote! {
+        impl #name {
+            #[doc(hidden)]
+            pub fn _to_mlua_variants<M: mlua::UserDataMethods<Self>>(methods: &mut M) -> () {
+                #(#variant_registrations)*;
+            }
+        }
+    };
 
-	let original_tokens: proc_macro2::TokenStream = quote! {
-		#ast
-	};
-	let helper_tokens: proc_macro2::TokenStream = quote! {
-		#helper_fn
-	};
+    let original_tokens: proc_macro2::TokenStream = quote! {
+        #ast
+    };
+    let helper_tokens: proc_macro2::TokenStream = quote! {
+        #helper_fn
+    };
 
-	let mut output: proc_macro2::TokenStream = original_tokens;
-	output.extend(helper_tokens);
+    let mut output: proc_macro2::TokenStream = original_tokens;
+    output.extend(helper_tokens);
 
-	return output.into();
+    return output.into();
 }
-
 
 /// Implements a helper function `_to_mlua_methods` for a Rust `impl` block,
 /// enabling automatic registration of its methods with `mlua::UserData`.
@@ -267,83 +263,83 @@ pub fn enumeration(__attr: TokenStream, item: TokenStream) -> TokenStream {
 /// * `mlua_magic_macros::compile!` — final hookup to `mlua::UserData`
 #[proc_macro_attribute]
 pub fn implementation(_attr: TokenStream, item: TokenStream) -> TokenStream {
-	let ast: syn::ItemImpl = parse_macro_input!(item as syn::ItemImpl);
-	let name: &syn::Type = &ast.self_ty;
+    let ast: syn::ItemImpl = parse_macro_input!(item as syn::ItemImpl);
+    let name: &syn::Type = &ast.self_ty;
 
-	let mut method_registrations: Vec<proc_macro2::TokenStream> = Vec::new();
+    let mut method_registrations: Vec<proc_macro2::TokenStream> = Vec::new();
 
-	for item in &ast.items {
-		if let syn::ImplItem::Fn(fn_item) = item {
-			let fn_name: &Ident = &fn_item.sig.ident;
-			let fn_name_str: String = fn_name.to_string();
+    for item in &ast.items {
+        if let syn::ImplItem::Fn(fn_item) = item {
+            let fn_name: &Ident = &fn_item.sig.ident;
+            let fn_name_str: String = fn_name.to_string();
 
-			// Extract argument names and types, skipping the `self` receiver
-			let (arg_names, arg_tys): (Vec<_>, Vec<_>) = fn_item
-				.sig
-				.inputs
-				.iter()
-				.filter_map(|arg| {
-					if let syn::FnArg::Typed(pat_type) = arg {
-						if let Pat::Ident(pat_ident) = &*pat_type.pat {
-							Some((&pat_ident.ident, &pat_type.ty))
-						} else {
-							None
-						}
-					} else {
-						None
-					}
-				})
-				.unzip();
+            // Extract argument names and types, skipping the `self` receiver
+            let (arg_names, arg_tys): (Vec<_>, Vec<_>) = fn_item
+                .sig
+                .inputs
+                .iter()
+                .filter_map(|arg| {
+                    if let syn::FnArg::Typed(pat_type) = arg {
+                        if let Pat::Ident(pat_ident) = &*pat_type.pat {
+                            Some((&pat_ident.ident, &pat_type.ty))
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                })
+                .unzip();
 
-			// Check for `&self`, `&mut self`, or static
-			if let Some(receiver) = &fn_item.sig.receiver() {
-				if receiver.mutability.is_some() {
-					// Here, `this`` is is `&mut self`
-					method_registrations.push(quote! {
+            // Check for `&self`, `&mut self`, or static
+            if let Some(receiver) = &fn_item.sig.receiver() {
+                if receiver.mutability.is_some() {
+                    // Here, `this`` is is `&mut self`
+                    method_registrations.push(quote! {
 						methods.add_method_mut(#fn_name_str, |_, this, (#(#arg_names,)*): (#(#arg_tys,)*)| {
 							return Ok(this.#fn_name(#(#arg_names,)*));
 						});
 					});
-				} else {
-					// Here, `this`` is `&self`
-					method_registrations.push(quote! {
+                } else {
+                    // Here, `this`` is `&self`
+                    method_registrations.push(quote! {
 						 methods.add_method(#fn_name_str, |_, this, (#(#arg_names,)*): (#(#arg_tys,)*)| {
 							return Ok(this.#fn_name(#(#arg_names,)*));
 						});
 					});
-				};
-			} else {
-				// This is a static function (like `new`)
-				method_registrations.push(quote! {
-					methods.add_function(#fn_name_str, |_, (#(#arg_names,)*): (#(#arg_tys,)*)| {
-						return Ok(#name::#fn_name(#(#arg_names,)*));
-					});
-				});
-			};
-		};
-	}
+                };
+            } else {
+                // This is a static function (like `new`)
+                method_registrations.push(quote! {
+                    methods.add_function(#fn_name_str, |_, (#(#arg_names,)*): (#(#arg_tys,)*)| {
+                        return Ok(#name::#fn_name(#(#arg_names,)*));
+                    });
+                });
+            };
+        };
+    }
 
-	// Create the helper function `_to_mlua_methods`
-	let helper_fn: proc_macro2::TokenStream = quote! {
-		impl #name {
-			#[doc(hidden)]
-			pub fn _to_mlua_methods<M: mlua::UserDataMethods<Self>>(methods: &mut M) -> () {
-				#(#method_registrations)*
-			}
-		}
-	};
+    // Create the helper function `_to_mlua_methods`
+    let helper_fn: proc_macro2::TokenStream = quote! {
+        impl #name {
+            #[doc(hidden)]
+            pub fn _to_mlua_methods<M: mlua::UserDataMethods<Self>>(methods: &mut M) -> () {
+                #(#method_registrations)*
+            }
+        }
+    };
 
-	let original_tokens: proc_macro2::TokenStream = quote! {
-		#ast
-	};
-	let helper_tokens: proc_macro2::TokenStream = quote! {
-		#helper_fn
-	};
+    let original_tokens: proc_macro2::TokenStream = quote! {
+        #ast
+    };
+    let helper_tokens: proc_macro2::TokenStream = quote! {
+        #helper_fn
+    };
 
-	let mut output: proc_macro2::TokenStream = original_tokens;
-	output.extend(helper_tokens);
+    let mut output: proc_macro2::TokenStream = original_tokens;
+    output.extend(helper_tokens);
 
-	return output.into();
+    return output.into();
 }
 
 // # Bottom of file
@@ -385,90 +381,90 @@ pub fn implementation(_attr: TokenStream, item: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro]
 pub fn compile(input: TokenStream) -> TokenStream {
-	let compile_args: compile::CompileArgs = parse_compile_args(input).unwrap();
-	let type_path: TypePath = compile_args.type_path.clone().expect("Type is required.");
+    let compile_args: compile::CompileArgs = parse_compile_args(input).unwrap();
+    let type_path: TypePath = compile_args.type_path.clone().expect("Type is required.");
 
-	// Conditionally generate the call to the helper function
-	let fields_call: proc_macro2::TokenStream = if compile_args.fields.unwrap_or(false) {
-		quote! {
-			Self::_to_mlua_fields(fields);
-		}
-	} else {
-		quote! { /* Do nothing */ }
-	};
+    // Conditionally generate the call to the helper function
+    let fields_call: proc_macro2::TokenStream = if compile_args.fields.unwrap_or(false) {
+        quote! {
+            Self::_to_mlua_fields(fields);
+        }
+    } else {
+        quote! { /* Do nothing */ }
+    };
 
-	let methods_call: proc_macro2::TokenStream = if compile_args.methods.unwrap_or(false) {
-		quote! {
-			Self::_to_mlua_methods(methods);
-		}
-	} else {
-		quote! { /* Do nothing */ }
-	};
+    let methods_call: proc_macro2::TokenStream = if compile_args.methods.unwrap_or(false) {
+        quote! {
+            Self::_to_mlua_methods(methods);
+        }
+    } else {
+        quote! { /* Do nothing */ }
+    };
 
-	let variants_call: proc_macro2::TokenStream = if compile_args.variants.unwrap_or(false) {
-		quote! {
-			Self::_to_mlua_variants(methods);
-		}
-	} else {
-		quote! { /* Do nothing */ }
-	};
+    let variants_call: proc_macro2::TokenStream = if compile_args.variants.unwrap_or(false) {
+        quote! {
+            Self::_to_mlua_variants(methods);
+        }
+    } else {
+        quote! { /* Do nothing */ }
+    };
 
-	// Assemble the final `impl mlua::UserData` block
-	let output: proc_macro2::TokenStream = quote! {
-		impl mlua::UserData for #type_path {
-			fn add_fields<'lua, F: mlua::UserDataFields<Self>>(fields: &mut F) -> () {
-				#fields_call
-			}
+    // Assemble the final `impl mlua::UserData` block
+    let output: proc_macro2::TokenStream = quote! {
+        impl mlua::UserData for #type_path {
+            fn add_fields<'lua, F: mlua::UserDataFields<Self>>(fields: &mut F) -> () {
+                #fields_call
+            }
 
-			fn add_methods<'lua, M: mlua::UserDataMethods<Self>>(methods: &mut M) -> () {
-				#methods_call
-				#variants_call
-			}
-		}
-		impl mlua::FromLua for #type_path {
-    		fn from_lua(value: mlua::Value, lua: &mlua::Lua) -> mlua::Result<Self> {
-				let output: mlua::Result<Self> = match value {
-					mlua::Value::UserData(user_data) => {
-						return match user_data.borrow::<Self>() {
-							Ok(b) => Ok((*b).clone()),
-							Err(_) => Err(mlua::Error::FromLuaConversionError {
-								from: "UserData",
-								to: stringify!(#type_path).to_string(),
-								message: Some("userdata is not this exact Rust type".into()),
-							})
-						};
-					},
-					_ => Err(mlua::Error::FromLuaConversionError {
-						from: value.type_name(),
-						to: stringify!(#type_path).to_string(),
-						message: Some("expected userdata created by mlua_magic_macros".into()),
-					}),
-				};
+            fn add_methods<'lua, M: mlua::UserDataMethods<Self>>(methods: &mut M) -> () {
+                #methods_call
+                #variants_call
+            }
+        }
+        impl mlua::FromLua for #type_path {
+            fn from_lua(value: mlua::Value, lua: &mlua::Lua) -> mlua::Result<Self> {
+                let output: mlua::Result<Self> = match value {
+                    mlua::Value::UserData(user_data) => {
+                        return match user_data.borrow::<Self>() {
+                            Ok(b) => Ok((*b).clone()),
+                            Err(_) => Err(mlua::Error::FromLuaConversionError {
+                                from: "UserData",
+                                to: stringify!(#type_path).to_string(),
+                                message: Some("userdata is not this exact Rust type".into()),
+                            })
+                        };
+                    },
+                    _ => Err(mlua::Error::FromLuaConversionError {
+                        from: value.type_name(),
+                        to: stringify!(#type_path).to_string(),
+                        message: Some("expected userdata created by mlua_magic_macros".into()),
+                    }),
+                };
 
-				return output;
-			}
-		}
-		/*impl #type_path {
-			#[doc(hidden)]
-			pub fn _to_mlua_skeleton(lua: &mlua::Lua) -> Result<mlua::AnyUserData, mlua::Error> { // Spooky scary skeletons
-				let skeleton: mlua::AnyUserData = lua.create_any_userdata(Self::default())?;
-				
-				// TODO: Implement this
+                return output;
+            }
+        }
+        /*impl #type_path {
+            #[doc(hidden)]
+            pub fn _to_mlua_skeleton(lua: &mlua::Lua) -> Result<mlua::AnyUserData, mlua::Error> { // Spooky scary skeletons
+                let skeleton: mlua::AnyUserData = lua.create_any_userdata(Self::default())?;
 
-				return Ok(skeleton);
-			}
-		}*/
-		/*impl mlua::IntoLua for #type_path {
-			fn into_lua(self, lua: &mlua::Lua) -> mlua::Result<mlua::Value> {
-				let user_data: mlua::AnyUserData = lua.create_any_userdata(self)?;
-				let value: mlua::Value = user_data.to_value();
+                // TODO: Implement this
 
-				return Ok(value);
-			}
-		}*/
-	};
+                return Ok(skeleton);
+            }
+        }*/
+        /*impl mlua::IntoLua for #type_path {
+            fn into_lua(self, lua: &mlua::Lua) -> mlua::Result<mlua::Value> {
+                let user_data: mlua::AnyUserData = lua.create_any_userdata(self)?;
+                let value: mlua::Value = user_data.to_value();
 
-	return output.into();
+                return Ok(value);
+            }
+        }*/
+    };
+
+    return output.into();
 }
 
 /// Registers one or more Rust types implementing `mlua::UserData` as global
@@ -513,20 +509,20 @@ pub fn compile(input: TokenStream) -> TokenStream {
 /// typically handled by using the `mlua_magic_macros::compile!` macro.
 #[proc_macro]
 pub fn load(input: TokenStream) -> TokenStream {
-	let load::LoadInput {
-		lua_expr,
-		type_paths,
-	} = parse_macro_input!(input as load::LoadInput);
+    let load::LoadInput {
+        lua_expr,
+        type_paths,
+    } = parse_macro_input!(input as load::LoadInput);
 
-	let output: proc_macro2::TokenStream = quote! {{
-		let lua: &mlua::Lua = &#lua_expr;
-		let globals: mlua::Table = lua.globals();
+    let output: proc_macro2::TokenStream = quote! {{
+        let lua: &mlua::Lua = &#lua_expr;
+        let globals: mlua::Table = lua.globals();
 
-		#(
-			// Register type globally under its Rust name
-			globals.set(stringify!(#type_paths), lua.create_proxy::<#type_paths>()?)?;
-		)*
-	}};
+        #(
+            // Register type globally under its Rust name
+            globals.set(stringify!(#type_paths), lua.create_proxy::<#type_paths>()?)?;
+        )*
+    }};
 
-	return output.into();
+    return output.into();
 }
