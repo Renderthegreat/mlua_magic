@@ -1,0 +1,3 @@
+# My Rust style config
+hard_tabs = true
+tab_spaces = 4

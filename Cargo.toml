@@ -1,6 +1,6 @@
 [package]
 name = "mlua-magic-macros"
-version = "0.1.2"
+version = "0.2.0"
 authors = ["Brendan Lucas <brendan@mail.renderlabs.cloud>"]
 description = "Simplify mlua type conversions like magic!"
 repository = "https://github.com/Renderthegreat/mlua_magic"
@@ -15,7 +15,7 @@ proc-macro = true
 syn = { version = "2.0", features = ["full"] }
 quote = "1.0"
 proc-macro2 = "1.0"
-darling = "0.21.3"
+darling = "0.23.0"
 
 [dev-dependencies]
 mlua = { version = "0.11.4", features = ["lua54", "serde", "macros", "async"] }

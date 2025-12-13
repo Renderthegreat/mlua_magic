@@ -1,102 +1,101 @@
 #[cfg(test)]
 pub mod example {
-    use std::time::Duration;
+	use ::mlua::prelude::*;
 
-    use ::mlua::prelude::*;
+	use ::mlua_magic_macros;
 
-    use ::mlua_magic_macros;
+	use ::smol::Timer;
+	use ::std::time::Duration;
+	use ::tracing::*;
 
-    use ::smol::Timer;
-    use ::tracing::*;
+	#[derive(Debug, Copy, Clone, Default, PartialEq)]
+	#[mlua_magic_macros::enumeration]
+	pub enum PlayerStatus {
+		#[default]
+		Idle,
+		Walking,
+		Attacking(i32),
+	}
 
-    #[derive(Debug, Copy, Clone, Default, PartialEq)]
-    #[mlua_magic_macros::enumeration]
-    pub enum PlayerStatus {
-        #[default]
-        Idle,
-        Walking,
-        Attacking(i32),
-    }
+	mlua_magic_macros::compile!(type_path = PlayerStatus, variants = true);
 
-    mlua_magic_macros::compile!(type_path = PlayerStatus, variants = true);
+	#[derive(Debug, Clone, Default)]
+	#[mlua_magic_macros::structure]
+	pub struct Player {
+		name: String,
+		hp: i32,
+		status: PlayerStatus,
+	}
 
-    #[derive(Debug, Clone, Default)]
-    #[mlua_magic_macros::structure]
-    pub struct Player {
-        name: String,
-        hp: i32,
-        status: PlayerStatus,
-    }
+	mlua_magic_macros::compile!(type_path = Player, fields = true, methods = true);
 
-    mlua_magic_macros::compile!(type_path = Player, fields = true, methods = true);
+	#[mlua_magic_macros::implementation]
+	impl Player {
+		// This will be registered as a static "constructor"
+		pub fn new(name: String) -> Self {
+			return Self {
+				name: name,
+				hp: 100,
+				status: PlayerStatus::Idle,
+			};
+		}
 
-    #[mlua_magic_macros::implementation]
-    impl Player {
-        // This will be registered as a static "constructor"
-        pub fn new(name: String) -> Self {
-            return Self {
-                name: name,
-                hp: 100,
-                status: PlayerStatus::Idle,
-            };
-        }
+		// This will be registered as a `&mut self` method
+		pub fn take_damage(&mut self, amount: i32) -> () {
+			self.hp -= amount;
+			if self.hp < 0 {
+				self.hp = 0;
+			};
 
-        // This will be registered as a `&mut self` method
-        pub fn take_damage(&mut self, amount: i32) -> () {
-            self.hp -= amount;
-            if self.hp < 0 {
-                self.hp = 0;
-            };
+			println!("Player took {} damage, {} HP remaining", amount, self.hp);
+		}
 
-            println!("Player took {} damage, {} HP remaining", amount, self.hp);
-        }
+		// This will be registered as a `&self` method
+		pub fn is_alive(&self) -> bool {
+			return self.hp > 0;
+		}
+	}
 
-        // This will be registered as a `&self` method
-        pub fn is_alive(&self) -> bool {
-            return self.hp > 0;
-        }
-    }
+	#[derive(Debug, Clone, Default)]
+	#[mlua_magic_macros::structure]
+	pub struct Db {
+		count: i32,
+	}
 
-    #[derive(Debug, Clone, Default)]
-    #[mlua_magic_macros::structure]
-    pub struct Db {
-        count: i32,
-    }
+	#[mlua_magic_macros::implementation]
+	impl Db {
+		pub async fn init_async() -> Self {
+			// Simulate initialization
+			Timer::after(Duration::from_millis(100)).await;
+			return Self { count: 0 };
+		}
 
-    #[mlua_magic_macros::implementation]
-    impl Db {
-        pub async fn init_async() -> Self {
-            // Simulate initialization
-            Timer::after(Duration::from_millis(100)).await;
-            return Self { count: 0 };
-        }
+		pub async fn write_async(&mut self) -> () {
+			// Simulate write
+			Timer::after(Duration::from_millis(100)).await;
+			self.count += 1;
+		}
 
-        pub async fn write_async(&mut self) -> () {
-            // Simulate write
-            Timer::after(Duration::from_millis(100)).await;
-            self.count += 1;
-        }
+		pub async fn read_async(&self) -> i32 {
+			// Simulate read
+			Timer::after(Duration::from_millis(100)).await;
+			return self.count;
+		}
+	}
 
-        pub async fn read_async(&self) -> i32 {
-            // Simulate read
-            Timer::after(Duration::from_millis(100)).await;
-            return self.count;
-        }
-    }
+	mlua_magic_macros::compile!(type_path = Db, fields = false, methods = true);
 
-    mlua_magic_macros::compile!(type_path = Db, fields = false, methods = true);
+	#[test]
+	fn main() -> LuaResult<()> {
+		smol::block_on(async {
+			::tracing_subscriber::fmt::init();
+			let lua: Lua = Lua::new();
 
-    #[test]
-    fn main() -> LuaResult<()> {
-        smol::block_on(async {
-            ::tracing_subscriber::fmt::init();
-            let lua: Lua = Lua::new();
+			// # We can now call Player.new() FROM LUA! ---
+			mlua_magic_macros::load!(lua, Player, PlayerStatus, Db);
 
-            // # We can now call Player.new() FROM LUA! ---
-            mlua_magic_macros::load!(lua, Player, PlayerStatus, Db);
-
-            // # This is the Lua script we will run ---
-            let lua_script: &str = r#"
+			// # This is the Lua script we will run ---
+			let lua_script: &str = r#"
                 -- Call the static `new` function we registered
                 print(PlayerStatus.Idle());
                 player = Player.new("LuaHero");
@@ -134,25 +133,25 @@ pub mod example {
                 print("New value:", db:read_async());
             "#;
 
-            // Execute the script
-            lua.load(lua_script).exec_async().await?;
+			// Execute the script
+			lua.load(lua_script).exec_async().await?;
 
-            // We can also retrieve the player and see the changes reflected in Rust
-            let modified_player: Player = lua.globals().get("player")?;
-            let modified_db: Db = lua.globals().get("db")?;
-            modified_db.read_async().await;
+			// We can also retrieve the player and see the changes reflected in Rust
+			let modified_player: Player = lua.globals().get("player")?;
+			let modified_db: Db = lua.globals().get("db")?;
+			modified_db.read_async().await;
 
-            info!("\n--- Back in Rust ---");
-            info!("Player after Lua script: {:?}", modified_player);
-            info!("Db after Lua script: {:?}", modified_db);
+			info!("\n--- Back in Rust ---");
+			info!("Player after Lua script: {:?}", modified_player);
+			info!("Db after Lua script: {:?}", modified_db);
 
-            assert_eq!(modified_player.hp, 0);
-            assert_eq!(modified_player.status, PlayerStatus::Attacking(20));
-            assert!(!modified_player.is_alive());
+			assert_eq!(modified_player.hp, 0);
+			assert_eq!(modified_player.status, PlayerStatus::Attacking(20));
+			assert!(!modified_player.is_alive());
 
-            assert_eq!(modified_db.count, 1);
+			assert_eq!(modified_db.count, 1);
 
-            return Ok(());
-        })
-    }
+			return Ok(());
+		})
+	}
 }

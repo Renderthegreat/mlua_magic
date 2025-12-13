@@ -137,7 +137,7 @@ print("Is alive?", player:is_alive()); -- `false`
 
 This crate uses a 3-step process:
 
-1.  **Decorate:** Add attributes (`#[...])` to your types to tell the macros what to export.
+1.  **Decorate:** Add attributes (`#[...]`) to your types to tell the macros what to export.
 2.  **Compile:** Use the `compile!(...)` macro to generate the `impl mlua::UserData` block.
 3.  **Load:** Use the `load!(...)` macro at runtime to register your types with a `Lua` instance. You can also manually load your types if our API doesn't allow you to do something.
 
